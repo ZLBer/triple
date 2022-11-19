@@ -209,16 +209,13 @@ func (t *TripleClient) IsAvailable() bool {
 }
 
 func getClientTlsCertificate(opt *config.Option) (credentials.TransportCredentials, error) {
-	// no TLS
-	if opt.TLSCertFile == "" && opt.TLSKeyFile == "" {
+	//no TLS
+	if opt.CACertFile == "" {
 		return nil, nil
 	}
-
-	if opt.CACertFile == "" {
-		return credentials.NewClientTLSFromFile(opt.TLSCertFile, opt.TLSServerName)
+	cfg := &tls.Config{
+		ServerName: opt.TLSServerName,
 	}
-
-	// need mTLS
 	ca := x509.NewCertPool()
 	caBytes, err := ioutil.ReadFile(opt.CACertFile)
 	if err != nil {
@@ -227,14 +224,15 @@ func getClientTlsCertificate(opt *config.Option) (credentials.TransportCredentia
 	if ok := ca.AppendCertsFromPEM(caBytes); !ok {
 		return nil, err
 	}
-	cert, err := tls.LoadX509KeyPair(opt.TLSCertFile, opt.TLSKeyFile)
-	if err != nil {
-		return nil, err
+	cfg.RootCAs = ca
+	//need mTls
+	if opt.TLSCertFile != "" {
+		var cert tls.Certificate
+		cert, err = tls.LoadX509KeyPair(opt.TLSCertFile, opt.TLSKeyFile)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Certificates = []tls.Certificate{cert}
 	}
-
-	return credentials.NewTLS(&tls.Config{
-		ServerName:   opt.TLSServerName,
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      ca,
-	}), nil
+	return credentials.NewTLS(cfg), err
 }
